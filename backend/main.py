@@ -8,7 +8,7 @@ from fastapi.responses import StreamingResponse
 from typing import List, Annotated
 from datetime import timedelta
 from pydantic import BaseModel
-from .routers import scraper, location
+from routers import scraper, location
 
 app = FastAPI()
 
