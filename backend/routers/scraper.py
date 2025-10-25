@@ -6,6 +6,7 @@ import os, requests, anthropic, json, re
 from typing import List, Dict
 from apify_client import ApifyClient
 from playwright.async_api import async_playwright
+from datetime import datetime
 
 load_dotenv()
 
@@ -21,6 +22,8 @@ GEO_URL = os.environ.get("GOOGLE_GEOCODING_URL")
 GEO_KEY = os.environ.get("GOOGLE_GEOCODING_API")
 
 CIVIC_HUB_BASE = os.environ.get("CIVIC_HUB_BASE")
+
+SPACE = " "
 
 client = anthropic.Anthropic(api_key=os.environ.get("CLAUDE_API_KEY"))
 
@@ -248,10 +251,18 @@ def pub_sent(ps: PublicSentiment):
 async def safety_metric(crime: Crime):
     score = 10
 
-    recs = crime_recs(crime)
-    recs = recs["recommendations"]
+    recs = await crime_recs(crime)
+    recs = recs["data"]["recommendations"]
 
-    return recs
+    # Now parse the recommendations to develop some metric for safety.
+
+    # Check time:
+    curr_time = datetime.now().time()
+    low_time = recs["safest_earliest_time"]
+    high_time = recs["safest_latest_time"]
+    ind_l = low_time.find(SPACE)
+    low_time = int(low_time[:ind_l - 3])
+    # high_l = 
 
     return {"status": 0, "data": score}
     

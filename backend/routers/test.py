@@ -5,6 +5,7 @@ from bs4 import BeautifulSoup
 import pandas as pd
 from dotenv import load_dotenv
 import asyncio
+from datetime import datetime
 
 load_dotenv()
 
@@ -36,17 +37,18 @@ async def main():
     # data = await scrape_civic_hub("alamo-square")
     # print(data)
 
-    user = {
-        "jewelry": "silver bracelet, gold necklace",
-        "clothes": "medium expensive, not too flashy",
-        "time of day": "3:00 p.m. to 9:00 p.m."
-    }
+    # user = {
+    #     "jewelry": "silver bracelet, gold necklace",
+    #     "clothes": "medium expensive, not too flashy",
+    #     "time of day": "3:00 p.m. to 9:00 p.m."
+    # }
 
-    nhood = await scrape_civic_hub("Civic Center")
-    data = claude_compose(user, nhood)
+    # nhood = await scrape_civic_hub("Civic Center")
+    # data = claude_compose(user, nhood)
 
-    print(data)
+    # print(data)
 
+    print(datetime.now().time())
     
 
 if __name__ == "__main__":
