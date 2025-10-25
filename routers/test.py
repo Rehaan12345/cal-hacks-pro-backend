@@ -1,4 +1,4 @@
-from scraper import find_distance, get_coords, scrape_civic_hub, claude_compose, safety_metric
+from scraper import find_distance, get_coords, scrape_civic_hub, claude_compose, safety_metric, police_stations, PoliceStations, find_police, filter_police
 from firecrawl import Firecrawl
 import os, requests, json, re
 from bs4 import BeautifulSoup
@@ -6,6 +6,7 @@ import pandas as pd
 from dotenv import load_dotenv
 import asyncio
 from datetime import datetime
+import time
 
 load_dotenv()
 
@@ -48,9 +49,33 @@ async def main():
 
     # print(data)
 
-    # print(datetime.now().time())
+    # curr_time = datetime.now().time()
+    # hour = int(curr_time.hour())
+    # ind_c = curr_time.find(":")
+    # print()
 
-    safety_metric
+    p_data = PoliceStations(
+        coords=[
+            "37.78126085987053", 
+            "-122.4164403448156"
+        ],
+        neighborhood="Civic Center",
+        city="San Francisco",
+        state="California",
+        max_search=10,
+        radius=1
+    )
+
+    p_stations = find_police("San Francisco", "California", 10)
+
+    data = []
+    for i in range(1, 4):
+        data.append(filter_police([
+            "37.78126085987053", 
+            "-122.4164403448156"
+        ], p_stations, i))
+
+    print(data, len(data))
     
 
 if __name__ == "__main__":

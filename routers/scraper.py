@@ -138,6 +138,7 @@ class SafetyAnalysisResponse(BaseModel):
     status: int
     data: Data
 
+# SAMPLE CRIME-RECS RESPONSE / SCHEMA
 @router.get("/safety-analysis", response_model=SafetyAnalysisResponse)
 def get_safety_analysis():
     return {
@@ -256,17 +257,83 @@ def claude_compose(user, nhood):
             model="claude-sonnet-4-5-20250929",
             max_tokens=20000,
             temperature=1,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": f"Provide ONLY A JSON ouput! Do NOT respond with your reasoning or analysis. Make sure all of that is internal. You are provided with a user profile of {user}. Compare that with the neighborhood data of {nhood}. BY ONLY USING THE DATA PRESENTED IN THE TABLE, DO NOT EXTRAPULATE OR ADD DATA. THE DATA ON THE TABLE IS THE ONLY INFORMATION YOU HAVE ON THE SAFETY OF THE NEIGHBORHOOD, combined with the data from the user profile, RESPONDING ONLY IN JSON FORMAT, return the safest earliest times to go out, and the safest latest times to go out. The user may be wearing expensive or inexpensive jewelery, clothing, etc., so the JSON ONLY response should acknowledge that. Also make sure to give safety levels like high, medium, or low."
-                        }
-                    ]
-                },
-            ]
+            messages = [
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "text",
+                "text": f"""
+Provide ONLY a valid JSON output — nothing else.
+Do NOT include reasoning, explanations, or commentary in your response. All analysis should be internal.
+
+You are provided with a user profile of {user} and the neighborhood data of {nhood}.
+Using ONLY the data provided in the table — do NOT extrapolate, estimate, or add missing data — compare these datasets to determine the safest earliest and latest times to go out.
+
+Rules:
+- Respond ONLY in JSON format using the schema below.
+- Do NOT include markdown, comments, or text outside JSON.
+- If no user input or no data is available, return: {{ "recommendations": {{}} }}
+- Always include your results under the top-level key `"recommendations"` (never rename it).
+- Use safety levels: "low", "medium", or "high".
+- Do not fabricate times, counts, or incidents — only use what is present in the table.
+
+Follow this exact JSON schema for all responses:
+
+{{
+  "recommendations": {{
+    "safest_earliest_time": "3:00 p.m.",
+    "safest_latest_time": "6:00 p.m.",
+    "overall_safety_level": "medium",
+    "time_period_analysis": {{
+      "3:00_pm_to_6:00_pm": {{
+        "safety_level": "medium",
+        "incident_count": 28,
+        "notable_incidents": [
+          "Larceny Theft",
+          "Drug Offense",
+          "Assault with Gun",
+          "Burglary",
+          "Robbery"
+        ],
+        "jewelry_risk": "medium",
+        "reasoning": "Moderate criminal activity including thefts and one aggravated assault with gun at 4:03 PM in South of Market. Silver bracelet and gold necklace may attract attention in certain districts."
+      }},
+      "6:00_pm_to_9:00_pm": {{
+        "safety_level": "medium",
+        "incident_count": 25,
+        "notable_incidents": [
+          "Motor Vehicle Theft",
+          "Larceny Theft",
+          "Assault",
+          "Battery",
+          "Burglary"
+        ],
+        "jewelry_risk": "medium",
+        "reasoning": "Criminal activity continues with thefts, assaults, and battery incidents. Medium expensive clothing and visible jewelry present moderate risk."
+      }}
+    }},
+    "high_risk_areas": [
+      "Tenderloin",
+      "Mission",
+      "South of Market",
+      "Bayview Hunters Point"
+    ],
+    "lower_risk_areas": [
+      "Marina",
+      "Inner Sunset",
+      "Outer Richmond"
+    ],
+    "jewelry_considerations": "Silver bracelet and gold necklace may attract unwanted attention, particularly in high-crime districts like Tenderloin and Mission where multiple theft incidents occur during preferred hours",
+    "clothing_considerations": "Medium expensive, not too flashy clothing reduces risk compared to obviously expensive attire, but theft incidents remain present throughout time preference window"
+  }}
+}}
+"""
+            }
+        ]
+    }
+]
+
         )
 
         data = message.content
@@ -410,8 +477,55 @@ async def safety_metric(crime: Crime):
     low_time = recs["safest_earliest_time"]
     high_time = recs["safest_latest_time"]
     ind_l = low_time.find(SPACE)
-    low_time = int(low_time[:ind_l - 3])
-    # high_l = 
+    low_final_time = 0
+    if low_time.find("p.m") > -1: low_final_time += 12
+    low_final_time += int(low_time[:ind_l - 3])
+    ind_h = high_time.find(SPACE)
+    high_final_time = 0
+    if high_time.find("p.m.") > -1: high_final_time += 12
+    high_final_time += int(high_time[:ind_h - 3])
+
+    curr_hour = curr_time.hour
+
+    # If current time is not between safest range
+    if not (low_final_time <= curr_hour <= high_final_time):
+        score += 10
+
+    # If current time is within the last 2 hours of the safe range
+    elif high_final_time - 2 <= curr_hour <= high_final_time:
+        score += 20
+
+    print(curr_hour, low_final_time, high_final_time, score)
+
+    curr_weekday = datetime.now().weekday()  # Monday = 0, Sunday = 6
+
+    # Day of week 
+    if curr_weekday < 5:  # Monday–Friday
+        score += 5
+    else:  # Saturday–Sunday
+        score += 10
+
+    print("=" * 50)
+
+    p_data = PoliceStations(
+        coords=crime.coords,
+        neighborhood=crime.neighborhood,
+        city=crime.city,
+        state=crime.state,
+        max_search=10,
+        radius=1
+    )
+    
+    num_p_stations = len(police_stations(p_data)["data"])
+
+    print(num_p_stations) # num of police stations in a 1 mile radius
+
+    temp = 100 - (10 * num_p_stations)
+    if temp <= 0: temp = 0
+
+    score += ( temp / 2 )
+
+    if score > 100: score = 100
 
     return {"status": 0, "data": score}
     
