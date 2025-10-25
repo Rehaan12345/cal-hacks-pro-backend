@@ -80,9 +80,99 @@ class PoliceStations(BaseModel):
     neighborhood: str
     city: str
     state: str
-    transport: str
+    transport: str = "walk"
     max_search: int
     radius: float
+
+# RESPONSE SCHEMA FOR CRIME-RECS:
+
+class UserProfile(BaseModel):
+    jewelry: str
+    clothes: str
+    time_preference: str
+    risk_factors: str
+
+class CrimePatterns(BaseModel):
+    total_incidents: int
+    theft_related: int
+    assault_battery: int
+    robbery: int
+    drug_offenses: int
+    weapon_offenses: int
+    high_risk_neighborhoods: List[str]
+
+class SafestTimesWithinPreference(BaseModel):
+    earliest_safe_time: str
+    latest_safe_time: str
+    rationale: str
+
+class TimeSafetyLevel(BaseModel):
+    safety_level: str
+    incidents: int
+    concerning_incidents: List[str]
+
+class JewelryAndClothingRiskAssessment(BaseModel):
+    risk_level: str
+    recommendation: str
+
+class Analysis(BaseModel):
+    user_profile: UserProfile
+    crime_patterns_during_preferred_hours: Dict[str, CrimePatterns]
+    safest_times_within_preference: SafestTimesWithinPreference
+    safety_levels_by_time: Dict[str, TimeSafetyLevel]
+    jewelry_and_clothing_risk_assessment: JewelryAndClothingRiskAssessment
+
+class Recommendations(BaseModel):
+    safest_earliest_time: str
+    safest_latest_time: str
+    overall_safety_level_3pm_to_6pm: str
+    overall_safety_level_6pm_to_9pm: str
+    jewelry_precaution: str
+    high_risk_areas_to_avoid: List[str]
+
+class Data(BaseModel):
+    analysis: Analysis
+    recommendations: Recommendations
+
+class SafetyAnalysisResponse(BaseModel):
+    status: int
+    data: Data
+
+@router.get("/safety-analysis", response_model=SafetyAnalysisResponse)
+def get_safety_analysis():
+    return {
+        "status": 1,
+        "data": {
+            "analysis": {
+                "user_profile": {
+                    "jewelry": "silver bracelet, gold necklace",
+                    "clothes": "medium expensive, not too flashy",
+                    "time_preference": "3:00 p.m. to 9:00 p.m.",
+                    "risk_factors": "Wearing visible jewelry increases theft risk"
+                },
+                "crime_patterns_during_preferred_hours": {
+                    "3:00_pm_to_9:00_pm": {
+                        "total_incidents": 89,
+                        "theft_related": 18,
+                        "assault_battery": 12,
+                        "robbery": 3,
+                        "drug_offenses": 24,
+                        "weapon_offenses": 4,
+                        "high_risk_neighborhoods": [
+                            "Mission", "Tenderloin", "South of Market"
+                        ]
+                    }
+                }
+            },
+            "recommendations": {
+                "safest_earliest_time": "3:00 p.m.",
+                "safest_latest_time": "6:00 p.m.",
+                "high_risk_areas_to_avoid": [
+                    "Mission", "Tenderloin", "South of Market"
+                ]
+            }
+        }
+    }
 
 # CRIME
 
