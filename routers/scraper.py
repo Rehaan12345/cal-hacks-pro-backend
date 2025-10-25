@@ -1,31 +1,67 @@
 from fastapi import FastAPI, APIRouter
 from pydantic import BaseModel
-from firecrawl import Firecrawl
 from dotenv import load_dotenv
-import os, requests, anthropic, json, re
+import os, requests, json, re
 from typing import List, Dict
-from apify_client import ApifyClient
-from playwright.async_api import async_playwright
 from datetime import datetime
 
 load_dotenv()
 
 router = APIRouter(prefix="/scraper", tags=["scraper"])
 
-firecrawl = Firecrawl(api_key=os.environ.get("FIRE_KEY"))
+# Optional/third-party imports: wrap in try/except so missing packages or missing
+# environment variables don't crash the function at import time in Vercel.
+try:
+    from firecrawl import Firecrawl
+except Exception:
+    Firecrawl = None
 
-maps_client = ApifyClient(os.environ.get("APIFY_API"))
+try:
+    from apify_client import ApifyClient
+except Exception:
+    ApifyClient = None
+
+# Playwright is not required in the lightweight deployment; avoid importing it at module import time
+try:
+    # from playwright.async_api import async_playwright
+    async_playwright = None
+except Exception:
+    async_playwright = None
+
+try:
+    import anthropic
+except Exception:
+    anthropic = None
+
+# Initialize clients only if modules are present. If missing, set to None and
+# handle gracefully in request handlers.
+firecrawl = None
+maps_client = None
+client = None
 MAPS_URL = os.environ.get("MAPS_URL")
 MAPS_KEY = os.environ.get("MAPS_API")
-
 GEO_URL = os.environ.get("GOOGLE_GEOCODING_URL")
 GEO_KEY = os.environ.get("GOOGLE_GEOCODING_API")
-
 CIVIC_HUB_BASE = os.environ.get("CIVIC_HUB_BASE")
-
 SPACE = " "
 
-client = anthropic.Anthropic(api_key=os.environ.get("CLAUDE_API_KEY"))
+if Firecrawl is not None:
+    try:
+        firecrawl = Firecrawl(api_key=os.environ.get("FIRE_KEY"))
+    except Exception:
+        firecrawl = None
+
+if ApifyClient is not None:
+    try:
+        maps_client = ApifyClient(os.environ.get("APIFY_API"))
+    except Exception:
+        maps_client = None
+
+if anthropic is not None:
+    try:
+        client = anthropic.Anthropic(api_key=os.environ.get("CLAUDE_API_KEY"))
+    except Exception:
+        client = None
 
 class Crime(BaseModel):
     coords: List[str]
@@ -85,28 +121,35 @@ async def crime_recs(nhood: Crime):
 @router.post("/scrap-civic-hub/")
 async def scrape_civic_hub(neighborhood: str):
     """
-    Scrapes the civic hub (https://www.civichub.us/ca/san-francisco/gov/police-department/crime-data/neighborhoods) website
+    Scrapes the civic hub website
     Returns list of values to be parsed by Claude
     """
-    async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=True)
-        page = await browser.new_page()
-
-        await page.goto(f"{CIVIC_HUB_BASE}/{neighborhood}", timeout=60000)
-        await page.wait_for_timeout(2000)
-
-        await page.wait_for_selector("table")
-
-        rows = page.locator("table tr")
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        response = requests.get(f"{CIVIC_HUB_BASE}/{neighborhood}", headers=headers, timeout=30)
+        response.raise_for_status()
+        
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(response.text, 'html.parser')
+        table = soup.find('table')
+        
+        if not table:
+            return []
+            
         table_data = []
-        for i in range(await rows.count()):
-            cells = rows.nth(i).locator("th, td")
-            row_data = [await cells.nth(j).inner_text() for j in range(await cells.count())]
+        rows = table.find_all('tr')
+        for row in rows:
+            cells = row.find_all(['th', 'td'])
+            row_data = [cell.get_text(strip=True) for cell in cells]
             table_data.append(row_data)
-
-        await browser.close()
-
-    return table_data
+            
+        return table_data
+        
+    except Exception as e:
+        print(f"Error scraping civic hub: {str(e)}")
+        return []
 
 @router.post("/claude-digest/")
 def claude_compose(user, nhood):
@@ -114,8 +157,11 @@ def claude_compose(user, nhood):
     Runs user profile and data scraped through Claude
     Returns a set of recommendations and analysis based on the data.
     '''
+    # If Anthropic client isn't configured, return a clear error
+    if client is None:
+        return {"status": -1, "error_message": "Anthropic client not configured (CLAUDE_API_KEY missing or anthropic package not installed)"}
+
     try:
-            
         message = client.messages.create(
             model="claude-sonnet-4-5-20250929",
             max_tokens=20000,
@@ -137,7 +183,7 @@ def claude_compose(user, nhood):
 
         return data
     except Exception as e:
-        return {"status": -1, "error_message": {e}}
+        return {"status": -1, "error_message": str(e)}
 
 # POLICE
 
@@ -147,6 +193,9 @@ def police_stations(ps: PoliceStations):
     Finds all police stations within a certain radius.
     Returns only the police stations in the correct radius.
     '''
+    if maps_client is None:
+        return {"status": -1, "error_message": "Apify/Maps client not configured (APIFY_API missing or apify-client not installed)"}
+
     p_stations = find_police(ps.city, ps.state, ps.max_search)
 
     data = filter_police(ps.coords, p_stations, ps.radius)
@@ -166,13 +215,19 @@ def find_police(city, state, max_search):
         "maximumLeadsEnrichmentRecords": 0,
         "maxImages": 0,
     }
-    run = maps_client.actor("compass/crawler-google-places").call(run_input=run_input)
-    p_stations = []
+    if maps_client is None:
+        return []
 
-    for item in maps_client.dataset(run["defaultDatasetId"]).iterate_items():
-        p_stations.append(item)
+    try:
+        run = maps_client.actor("compass/crawler-google-places").call(run_input=run_input)
+        p_stations = []
 
-    return p_stations
+        for item in maps_client.dataset(run["defaultDatasetId"]).iterate_items():
+            p_stations.append(item)
+
+        return p_stations
+    except Exception:
+        return []
 
 def filter_police(og_coords, stations, radius):
     '''
@@ -208,6 +263,9 @@ def find_distance(origin, dest): # origin, dest are both list of coordinates
     Returns the mile difference of the two points
     '''
     try:
+        if not MAPS_URL or not MAPS_KEY:
+            return {"status": -1, "error_message": "MAPS_URL or MAPS_KEY not configured"}
+
         dist = -1
         url = f"{MAPS_URL}destinations={dest[0]},{dest[1]}&origins={origin[0]},{origin[1]}&units=imperial&key={MAPS_KEY}"
         response = requests.get(url)
@@ -219,25 +277,25 @@ def find_distance(origin, dest): # origin, dest are both list of coordinates
         dist = float(dist[:ind_space])
 
         return {"status": 0, "data": dist}
-    
     except Exception as e:
-        return {"status": -1, "error_message": {e}}
+        return {"status": -1, "error_message": str(e)}
     
 def get_coords(address):
     '''
     Uses Google Maps Geolocation API to return coordinates from an address
     '''
     try:
+        if not GEO_URL or not GEO_KEY:
+            return {"status": -1, "error_message": "GEO_URL or GEO_KEY not configured"}
+
         url = f"{GEO_URL}address={address}&key={GEO_KEY}"
-        print(url)
         response = requests.get(url)
         r_json = response.json()
         t_coords = r_json["results"][0]["geometry"]["location"]
         coords = [t_coords["lat"], t_coords["lng"]]
         return {"status": 0, "data": coords}
-    
     except Exception as e:
-        return {"status": -1, "error_message": e}
+        return {"status": -1, "error_message": str(e)}
 
 # SOCIAL SENTIMENT
 
@@ -252,6 +310,7 @@ async def safety_metric(crime: Crime):
     score = 10
 
     recs = await crime_recs(crime)
+    print(recs)
     recs = recs["data"]["recommendations"]
 
     # Now parse the recommendations to develop some metric for safety.

@@ -1,4 +1,4 @@
-from scraper import find_distance, get_coords, scrape_civic_hub, claude_compose
+from scraper import find_distance, get_coords, scrape_civic_hub, claude_compose, safety_metric
 from firecrawl import Firecrawl
 import os, requests, json, re
 from bs4 import BeautifulSoup
@@ -48,7 +48,9 @@ async def main():
 
     # print(data)
 
-    print(datetime.now().time())
+    # print(datetime.now().time())
+
+    safety_metric
     
 
 if __name__ == "__main__":

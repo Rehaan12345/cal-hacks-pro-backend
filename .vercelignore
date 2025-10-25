@@ -1,0 +1,22 @@
+# Exclude local virtual environments and large folders from Vercel deployments
+new_venv/
+venv/
+.env/
+.env
+.env.*
+__pycache__/
+node_modules/
+*.pyc
+*.pyo
+*.pyd
+build/
+dist/
+.eggs/
+*.egg-info/
+.pytest_cache/
+.coverage
+.cache/
+.DS_Store
+.vscode/
+tests/
+*.sqlite3
