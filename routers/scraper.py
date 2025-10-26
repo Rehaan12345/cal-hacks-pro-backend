@@ -5,6 +5,7 @@ import os, requests, json, re
 from typing import List, Dict
 from datetime import datetime
 from bs4 import BeautifulSoup
+from fastapi.responses import JSONResponse
 
 load_dotenv()
 
@@ -187,6 +188,9 @@ async def crime_recs(nhood: Crime):
     try:
         # Scrape data
         n_hood_stats = await scrape_civic_hub(nhood.neighborhood)
+        n_hood_stats = json.loads(n_hood_stats.body)
+        print(n_hood_stats)
+        print("*" * 100)
         data = claude_compose(nhood.user_stats, n_hood_stats)
 
         # Try to extract JSON from Claude response
@@ -210,13 +214,105 @@ async def crime_recs(nhood: Crime):
     except Exception as e:
         return {"status": -1, "error_message": f"Failed to find crime stats: {e}"}
 
-@router.post("/scrap-civic-hub/")
+# @router.post("/scrap-civic-hub/")
+# async def scrape_civic_hub(neighborhood: str):
+#     """
+#     Scrapes the civic hub website
+#     Returns list of values to be parsed by Claude
+#     """
+#     neighborhood = neighborhood.lower()
+#     if neighborhood.find(" ") > -1:
+#         first = neighborhood[:neighborhood.find(" ")]
+#         end = neighborhood[neighborhood.find(" ") + 1:]
+#         neighborhood = f"{first}-{end}"
+#     try:
+#         headers = {
+#             'User-Agent': (
+#                 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+#                 'AppleWebKit/537.36 (KHTML, like Gecko) '
+#                 'Chrome/91.0.4472.124 Safari/537.36'
+#             )
+#         }
+
+#         url = f"{CIVIC_HUB_BASE}/{neighborhood}"
+#         print(f"Fetching: {url}")
+
+#         # Step 1 – get static HTML
+#         response = requests.get(url, headers=headers, timeout=30)
+#         response.raise_for_status()
+#         soup = BeautifulSoup(response.text, "html.parser")
+
+#         table = soup.find("table")
+
+#         # Step 2 – if table missing or suspiciously constant (289 rows), check for data endpoints
+#         if not table:
+#             print("⚠️  No table tag found — trying to locate data source in page scripts...")
+#         else:
+#             rows = table.find_all("tr")
+#             if len(rows) == 289:  # CivicHub placeholder table symptom
+#                 print("⚠️  Detected placeholder table (289 rows) — attempting API lookup...")
+#             else:
+#                 # ✅ Static table looks legitimate
+#                 table_data = []
+#                 for row in rows:
+#                     cells = row.find_all(["th", "td"])
+#                     row_data = [cell.get_text(strip=True) for cell in cells]
+#                     table_data.append(row_data)
+#                 crime_amount = len(rows) - 1 if rows and rows[0].find("th") else len(rows)
+#                 table_data.append({"crime_amount": crime_amount})
+#                 return table_data
+
+#         # Step 3 – try to extract JSON or CSV endpoint URLs embedded in the page
+#         scripts = soup.find_all("script")
+#         api_url = None
+#         for script in scripts:
+#             if script.string and "crime-data" in script.string:
+#                 match = re.search(r"https://[^\s'\"]+crime-data[^\s'\"]+", script.string)
+#                 if match:
+#                     api_url = match.group(0)
+#                     break
+
+#         if api_url:
+#             print(f"Found possible data API: {api_url}")
+#             try:
+#                 data_resp = requests.get(api_url, headers=headers, timeout=30)
+#                 data_resp.raise_for_status()
+#                 # Try JSON first
+#                 if data_resp.headers.get("Content-Type", "").startswith("application/json"):
+#                     data = data_resp.json()
+#                     table_data = data.get("data") or data
+#                     crime_amount = len(table_data)
+#                     table_data.append({"crime_amount": crime_amount})
+#                     print("8" * 50)
+#                     print(table_data)
+#                     return table_data
+#                 # Try CSV fallback
+#                 elif "text/csv" in data_resp.headers.get("Content-Type", ""):
+#                     lines = data_resp.text.splitlines()
+#                     table_data = [line.split(",") for line in lines]
+#                     crime_amount = len(table_data) - 1
+#                     table_data.append({"crime_amount": crime_amount})
+#                     print("9" * 50)
+#                     print(table_data)
+#                     return table_data
+#             except Exception as e:
+#                 print(f"Failed to fetch data from detected API: {e}")
+                    
+#     except Exception as e:
+#         print(f"Error scraping civic hub: {str(e)}")
+#         return []
+
+@router.post("/scrape-civic-hub/")
 async def scrape_civic_hub(neighborhood: str):
     """
     Scrapes the civic hub website
-    Returns list of values to be parsed by Claude
+    Returns JSON list of values to be parsed by Claude
     """
     neighborhood = neighborhood.lower()
+    if " " in neighborhood:
+        first, end = neighborhood.split(" ", 1)
+        neighborhood = f"{first}-{end}"
+
     try:
         headers = {
             'User-Agent': (
@@ -229,22 +325,15 @@ async def scrape_civic_hub(neighborhood: str):
         url = f"{CIVIC_HUB_BASE}/{neighborhood}"
         print(f"Fetching: {url}")
 
-        # Step 1 – get static HTML
         response = requests.get(url, headers=headers, timeout=30)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
 
         table = soup.find("table")
 
-        # Step 2 – if table missing or suspiciously constant (289 rows), check for data endpoints
-        if not table:
-            print("⚠️  No table tag found — trying to locate data source in page scripts...")
-        else:
+        if table:
             rows = table.find_all("tr")
-            if len(rows) == 289:  # CivicHub placeholder table symptom
-                print("⚠️  Detected placeholder table (289 rows) — attempting API lookup...")
-            else:
-                # ✅ Static table looks legitimate
+            if len(rows) != 289:
                 table_data = []
                 for row in rows:
                     cells = row.find_all(["th", "td"])
@@ -252,9 +341,8 @@ async def scrape_civic_hub(neighborhood: str):
                     table_data.append(row_data)
                 crime_amount = len(rows) - 1 if rows and rows[0].find("th") else len(rows)
                 table_data.append({"crime_amount": crime_amount})
-                return table_data
+                return JSONResponse(content=table_data)
 
-        # Step 3 – try to extract JSON or CSV endpoint URLs embedded in the page
         scripts = soup.find_all("script")
         api_url = None
         for script in scripts:
@@ -269,32 +357,30 @@ async def scrape_civic_hub(neighborhood: str):
             try:
                 data_resp = requests.get(api_url, headers=headers, timeout=30)
                 data_resp.raise_for_status()
-                # Try JSON first
+
                 if data_resp.headers.get("Content-Type", "").startswith("application/json"):
                     data = data_resp.json()
                     table_data = data.get("data") or data
                     crime_amount = len(table_data)
                     table_data.append({"crime_amount": crime_amount})
-                    print("8" * 50)
-                    print(table_data)
-                    return table_data
-                # Try CSV fallback
+                    return JSONResponse(content=table_data)
+
                 elif "text/csv" in data_resp.headers.get("Content-Type", ""):
                     lines = data_resp.text.splitlines()
                     table_data = [line.split(",") for line in lines]
                     crime_amount = len(table_data) - 1
                     table_data.append({"crime_amount": crime_amount})
-                    print("9" * 50)
-                    print(table_data)
-                    return table_data
+                    return JSONResponse(content=table_data)
+
             except Exception as e:
                 print(f"Failed to fetch data from detected API: {e}")
-                    
-    except Exception as e:
-        print(f"Error scraping civic hub: {str(e)}")
-        return []
 
-@router.post("/claude-digest/")
+        return JSONResponse(content={"error": "No valid data found"}, status_code=404)
+
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+# @router.post("/claude-digest/")
 def claude_compose(user, nhood):
     '''
     Runs user profile and data scraped through Claude
@@ -387,7 +473,6 @@ Follow this exact JSON schema for all responses:
         ]
     }
 ]
-
         )
 
         data = message.content
@@ -518,68 +603,75 @@ def pub_sent(ps: PublicSentiment):
 
 @router.post("/safety-metric/")
 async def safety_metric(crime: Crime):
-    score = 10
+    # Start lower for expanded spread
+    score = 18  
 
     recs = await crime_recs(crime)
-    print(recs)
     recs = recs["data"]["recommendations"]
+    crime_count = recs["crime_amount"]
 
-    # Now parse the recommendations to develop some metric for safety.
-
-    # Check time:
+    # === Time-based danger adjustment ===
     curr_time = datetime.now().time()
     low_time = recs["safest_earliest_time"]
     high_time = recs["safest_latest_time"]
-    ind_l = low_time.find(SPACE)
-    low_final_time = 0
-    if low_time.find("p.m") > -1: low_final_time += 12
-    low_final_time += int(low_time[:ind_l - 3])
-    ind_h = high_time.find(SPACE)
-    high_final_time = 0
-    if high_time.find("p.m.") > -1: high_final_time += 12
-    high_final_time += int(high_time[:ind_h - 3])
 
+    def parse_time(t):
+        t = t.strip().lower()
+        base = int(t.split(":")[0])
+        if "p.m" in t and base != 12:
+            base += 12
+        elif "a.m" in t and base == 12:
+            base = 0
+        return base
+
+    low_final_time = parse_time(low_time)
+    high_final_time = parse_time(high_time)
     curr_hour = curr_time.hour
 
-    # If current time is not between safest range
+    # Outside safe window → more danger
     if not (low_final_time <= curr_hour <= high_final_time):
-        score += 10
-
-    # If current time is within the last 2 hours of the safe range
-    elif high_final_time - 2 <= curr_hour <= high_final_time:
-        score += 20
-
-    print(curr_hour, low_final_time, high_final_time, score)
-
-    curr_weekday = datetime.now().weekday()  # Monday = 0, Sunday = 6
-
-    # Day of week 
-    if curr_weekday < 5:  # Monday–Friday
         score += 5
-    else:  # Saturday–Sunday
-        score += 10
+    elif high_final_time - 2 <= curr_hour <= high_final_time:
+        score += 3
 
-    print("=" * 50)
+    # === Day of week ===
+    curr_weekday = datetime.now().weekday()
+    if curr_weekday < 5:
+        score += 1
+    else:
+        score += 3
 
+    # === Police presence ===
     p_data = PoliceStations(
         coords=crime.coords,
         neighborhood=crime.neighborhood,
         city=crime.city,
         state=crime.state,
-        max_search=10,
+        max_search=5,
         radius=1
     )
-    
     num_p_stations = len(police_stations(p_data)["data"])
 
-    print(num_p_stations) # num of police stations in a 1 mile radius
+    # More stations = safer (lower danger)
+    if num_p_stations == 0:
+        score += 10
+    elif num_p_stations < 5:
+        score += (5 - num_p_stations) * 2.2
 
-    temp = 100 - (10 * num_p_stations)
-    if temp <= 0: temp = 0
+    # === Crime-based scaling ===
+    # Increase the steepness for high-crime areas
+    normalized_crime = min(crime_count / 150, 3.0)
+    crime_danger = (normalized_crime ** 1.55) * 20
+    score += crime_danger
 
-    score += ( temp / 2 )
+    # === Normalize and constrain ===
+    score = max(15, min(score, 88))  # widened range
 
-    if score > 100: score = 100
+    # === Random variation for realism ===
+    import random
+    score += random.uniform(-1.0, 1.0)
+
+    # Round and bound to 0–100
+    score = max(0, min(round(score, 1), 100))
 
     return {"status": 0, "data": score}
-    

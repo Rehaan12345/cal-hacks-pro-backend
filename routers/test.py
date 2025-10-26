@@ -95,7 +95,7 @@ def parse_crime_table(CIVIC_HUB_BASE, neighborhood):
 #     r.raise_for_status()
 #     return r.json()
 
-async def main():
+async def main(neighborhood):
     # print(find_distance(["37.781146897023916", "-122.41645173191911"], ["37.802167204586695", "-122.44930210031018"]))
     # print(get_coords("Asian Art Museum, 200 Larkin St, San Francisco, CA 94102"))
 
@@ -151,13 +151,21 @@ async def main():
 
     # print(data, len(data))
 
-    data = parse_crime_table(
-        "https://www.civichub.us/ca/san-francisco/gov/police-department/crime-data",
-        "ingleside"
-    )
-    print(data)
-    print("-" * 25)
-    print(data[-1])
+    # data = parse_crime_table(
+    #     "https://www.civichub.us/ca/san-francisco/gov/police-department/crime-data",
+    #     "ingleside"
+    # )
+    # print(data)
+    # print("-" * 25)
+    # print(data[-1])
+
+    neighborhood = neighborhood.lower()
+    if neighborhood.find(" ") > -1:
+        first = neighborhood[:neighborhood.find(" ")]
+        end = neighborhood[neighborhood.find(" ") + 1:]
+        neighborhood = f"{first}-{end}"
+
+    print(neighborhood)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(main("Noe Valley"))

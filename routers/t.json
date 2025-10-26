@@ -1,0 +1,102 @@
+{
+  "status": 1,
+  "data": {
+    "recommendations": {
+      "safest_earliest_time": "3:00 p.m.",
+      "safest_latest_time": "4:00 p.m.",
+      "overall_safety_level": "high",
+      "time_period_analysis": {
+        "3:00_pm_to_4:00_pm": {
+          "safety_level": "medium",
+          "incident_count": 15,
+          "notable_incidents": [
+            "Drug Offense",
+            "Larceny Theft",
+            "Assault",
+            "Weapons Offense",
+            "Disorderly Conduct"
+          ],
+          "jewelry_risk": "medium",
+          "reasoning": "During the 3:00 p.m. to 4:00 p.m. window, incidents include drug offenses, larceny theft, assault, and weapons offenses. Silver bracelet and gold necklace may attract attention in Tenderloin."
+        },
+        "4:00_pm_to_5:00_pm": {
+          "safety_level": "medium",
+          "incident_count": 17,
+          "notable_incidents": [
+            "Larceny Theft",
+            "Assault",
+            "Drug Offense",
+            "Robbery",
+            "Disorderly Conduct"
+          ],
+          "jewelry_risk": "medium",
+          "reasoning": "Continued criminal activity with thefts, assaults, and robbery incidents. Medium expensive clothing and visible jewelry present moderate risk."
+        },
+        "5:00_pm_to_6:00_pm": {
+          "safety_level": "medium",
+          "incident_count": 21,
+          "notable_incidents": [
+            "Assault",
+            "Larceny Theft",
+            "Drug Offense",
+            "Motor Vehicle Theft",
+            "Battery"
+          ],
+          "jewelry_risk": "medium",
+          "reasoning": "Increased incidents including assaults, thefts, and battery. Jewelry may attract attention during this period."
+        },
+        "6:00_pm_to_7:00_pm": {
+          "safety_level": "medium",
+          "incident_count": 24,
+          "notable_incidents": [
+            "Robbery",
+            "Assault",
+            "Drug Offense",
+            "Larceny Theft",
+            "Weapons Offense"
+          ],
+          "jewelry_risk": "high",
+          "reasoning": "Higher crime activity with robbery incidents including robbery with knife. Silver and gold jewelry present higher risk."
+        },
+        "7:00_pm_to_8:00_pm": {
+          "safety_level": "medium",
+          "incident_count": 22,
+          "notable_incidents": [
+            "Assault",
+            "Larceny Theft",
+            "Drug Offense",
+            "Battery",
+            "Weapons Offense"
+          ],
+          "jewelry_risk": "medium",
+          "reasoning": "Ongoing criminal activity with assaults and thefts. Jewelry and clothing may attract unwanted attention."
+        },
+        "8:00_pm_to_9:00_pm": {
+          "safety_level": "high",
+          "incident_count": 32,
+          "notable_incidents": [
+            "Robbery",
+            "Assault with Gun",
+            "Larceny Theft",
+            "Battery",
+            "Drug Offense"
+          ],
+          "jewelry_risk": "high",
+          "reasoning": "Higher incident count with robberies, assaults with guns, and battery. Visible jewelry significantly increases risk during this hour."
+        }
+      },
+      "high_risk_areas": [
+        "Tenderloin",
+        "South of Market",
+        "Central"
+      ],
+      "lower_risk_areas": [
+        "Northern",
+        "Out of SF"
+      ],
+      "jewelry_considerations": "Silver bracelet and gold necklace significantly increase risk throughout the preferred time window, particularly after 6:00 p.m. when robbery and assault incidents escalate. Tenderloin district shows consistent theft and assault activity.",
+      "clothing_considerations": "Medium expensive, not too flashy clothing provides some protection, but theft and robbery incidents targeting personal belongings occur throughout 3:00 p.m. to 9:00 p.m. time preference.",
+      "crime_amount": 751
+    }
+  }
+}
