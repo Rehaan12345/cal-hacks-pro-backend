@@ -71,6 +71,7 @@ class Crime(BaseModel):
     city: str
     state: str
     user_stats: Dict[str, str]
+    transport: str = "walk"
 
 class PublicSentiment(BaseModel):
     neighborhood: str
@@ -195,7 +196,7 @@ async def crime_recs(nhood: Crime):
         n_hood_stats = json.loads(n_hood_stats.body)
         print(n_hood_stats)
         print("*" * 100)
-        data = claude_compose(nhood.user_stats, n_hood_stats)
+        data = claude_compose(nhood.user_stats, n_hood_stats, nhood.transport)
 
         # Try to extract JSON from Claude response
         text = data[0].text if isinstance(data, list) and hasattr(data[0], "text") else str(data)
@@ -297,7 +298,7 @@ async def scrape_civic_hub(neighborhood: str):
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 # @router.post("/claude-digest/")
-def claude_compose(user, nhood):
+def claude_compose(user, nhood, transport):
     '''
     Runs user profile and data scraped through Claude
     Returns a set of recommendations and analysis based on the data.
@@ -322,7 +323,7 @@ Provide ONLY a valid JSON output — nothing else.
 Do NOT include reasoning, explanations, or commentary in your response. All analysis should be internal.
 
 You are provided with a user profile of {user} and the neighborhood data of {nhood}.
-Using ONLY the data provided in the table — do NOT extrapolate, estimate, or add missing data — give 7 sentences of advice to the user about how they should wear, what they should look out for, and any other RELEVANT details pertaining to both their environment in order for them to remain safe.
+Using ONLY the data provided in the table — do NOT extrapolate, estimate, or add missing data — give 7 sentences of advice to the user about how they should wear, what they should look out for, and any other RELEVANT details pertaining to both their environment in order for them to remain safe. Keep the recommendations concise and to the point, no more than 50 characters in length each. For the recommendations, take into account the {transport} variable, to help their user exclusively within their preferred mode of transport.
 
 Rules:
 - Respond ONLY in JSON format using the schema below.
@@ -336,10 +337,8 @@ Rules:
 Follow this exact JSON schema for all responses:
 
 {{
-  "recommendations": {{
-    ["rec1"], ["rec2"] ... ,
+    "recommendations": [rec1, rec2, ...],
     "crime_amount": 30
-  }}
 }}
 """
             }
