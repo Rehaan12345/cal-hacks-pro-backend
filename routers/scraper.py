@@ -66,7 +66,7 @@ if anthropic is not None:
         client = None
 
 class Crime(BaseModel):
-    # coords: List[str]
+    coords: List[str] = ["0", "0"]
     neighborhood: str
     city: str = "San Francisco"
     state: str = "California"
@@ -199,23 +199,24 @@ async def crime_recs(nhood: Crime):
         print("*" * 100)
         data = claude_compose(nhood.user_stats, n_hood_stats, nhood.transport, nhood.time)
 
-        # Try to extract JSON from Claude response
-        text = data[0].text if isinstance(data, list) and hasattr(data[0], "text") else str(data)
-        json_match = re.search(r"```json\s*(\{.*\})\s*```", text, re.DOTALL)
+        # data is already a dict (JSON parsed)
+        # data = json.dumps(data, indent=2)
 
-        print(text)
+        print(data)
 
-        if json_match:
-            json_str = json_match.group(1)
-            parsed = json.loads(json_str)
-            return {"status": 1, "data": parsed}
-        else:
-            print("No JSON found in text.")
-            return {
-                "status": 0,
-                "message": "No JSON found in response",
-                "raw_output": text[:1000]  # Optional: limit to prevent huge strings
-            }
+        return data
+
+        # if json_match:
+        #     json_str = json_match.group(1)
+        #     parsed = json.loads(json_str)
+        #     return {"status": 1, "data": parsed}
+        # else:
+        #     print("No JSON found in text.")
+        #     return {
+        #         "status": 0,
+        #         "message": "No JSON found in response",
+        #         "raw_output": text[:1000]  # Optional: limit to prevent huge strings
+        #     }
 
     except Exception as e:
         return {"status": -1, "error_message": f"Failed to find crime stats: {e}"}
@@ -358,23 +359,36 @@ Rules:
 - Also include in the recommendations the crime_amount from the {nhood} dataset.
 
 Follow this exact JSON schema for all responses:
-
-{{
     "recommendations": [rec1, rec2, ...],
     "crime_amount": 30
-}}
 """
             }
         ]
     }
 ]
         )
+        print("8" * 100)
+        import json
+        import re
 
-        data = message.content
+        # Get the raw text from the first TextBlock
+        raw_text = message.content[0].text.strip()
 
-        print(data)
+        # Remove markdown code fences if Claude includes them (```json ... ```)
+        clean_text = re.sub(r'^```json\n|\n```$', '', raw_text.strip())
 
-        return data
+        # Safely parse JSON
+        try:
+            parsed_json = json.loads(clean_text)
+        except json.JSONDecodeError:
+            # If parsing fails, return raw text for debugging
+            parsed_json = {"status": -2, "error_message": "Invalid JSON returned by Claude", "raw_output": clean_text}
+
+        print(parsed_json)
+        print("8" * 100)
+
+        return parsed_json
+
     except Exception as e:
         return {"status": -1, "error_message": str(e)}
 
@@ -504,25 +518,17 @@ async def safety_metric(crime: Crime, time: UserTime):
     score = 18  
 
     recs = await crime_recs(crime)
-    recs = recs["data"]["recommendations"]
+    print("*" * 100)
+    print(recs)
+    print("*" * 100)
     crime_count = recs["crime_amount"]
+    recs = recs["recommendations"]
 
     # === Time-based danger adjustment ===
     curr_time = datetime.now().time()
     low_time = time.safest_earliest_time
     high_time = time.safest_latest_time
 
-    # def parse_time(t):
-    #     t = t.strip().lower()
-    #     base = int(t.split(":")[0])
-    #     if "p.m" in t and base != 12:
-    #         base += 12
-    #     elif "a.m" in t and base == 12:
-    #         base = 0
-    #     return base
-
-    # low_final_time = parse_time(low_time)
-    # high_final_time = parse_time(high_time)
     curr_hour = curr_time.hour
 
     # Outside safe window → more danger
