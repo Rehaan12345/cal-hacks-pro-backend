@@ -146,6 +146,12 @@ class UserTime(BaseModel):
     safest_earliest_time: int
     safest_latest_time: int
 
+class SafetyMetric(BaseModel):
+    time: UserTime
+    # crime: Crime
+    crime_count: int
+    num_p_stations: int
+
 # SAMPLE CRIME-RECS RESPONSE / SCHEMA
 @router.get("/safety-analysis", response_model=SafetyAnalysisResponse)
 def get_safety_analysis():
@@ -513,16 +519,14 @@ def pub_sent(ps: PublicSentiment):
 # METRIC SCORE
 
 @router.post("/safety-metric/")
-async def safety_metric(crime: Crime, time: UserTime):
+async def safety_metric(safety: SafetyMetric):
+    crime_count = safety.crime_count
+    num_p_stations = safety.num_p_stations
+    # crime = safety.crime
+    time = safety.time
+    
     # Start lower for expanded spread
     score = 18  
-
-    recs = await crime_recs(crime)
-    print("*" * 100)
-    print(recs)
-    print("*" * 100)
-    crime_count = recs["crime_amount"]
-    recs = recs["recommendations"]
 
     # === Time-based danger adjustment ===
     curr_time = datetime.now().time()
@@ -545,15 +549,15 @@ async def safety_metric(crime: Crime, time: UserTime):
         score += 3
 
     # === Police presence ===
-    p_data = PoliceStations(
-        coords=crime.coords,
-        neighborhood=crime.neighborhood,
-        city=crime.city,
-        state=crime.state,
-        max_search=5,
-        radius=1
-    )
-    num_p_stations = len(police_stations(p_data)["data"])
+    # p_data = PoliceStations(
+    #     coords=crime.coords,
+    #     neighborhood=crime.neighborhood,
+    #     city=crime.city,
+    #     state=crime.state,
+    #     max_search=5,
+    #     radius=1
+    # )
+    # num_p_stations = len(police_stations(p_data)["data"])
 
     # More stations = safer (lower danger)
     if num_p_stations == 0:
