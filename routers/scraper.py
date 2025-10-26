@@ -140,6 +140,10 @@ class SafetyAnalysisResponse(BaseModel):
     status: int
     data: Data
 
+class UserTime(BaseModel):
+    safest_earliest_time: int
+    safest_latest_time: int
+
 # SAMPLE CRIME-RECS RESPONSE / SCHEMA
 @router.get("/safety-analysis", response_model=SafetyAnalysisResponse)
 def get_safety_analysis():
@@ -213,95 +217,7 @@ async def crime_recs(nhood: Crime):
 
     except Exception as e:
         return {"status": -1, "error_message": f"Failed to find crime stats: {e}"}
-
-# @router.post("/scrap-civic-hub/")
-# async def scrape_civic_hub(neighborhood: str):
-#     """
-#     Scrapes the civic hub website
-#     Returns list of values to be parsed by Claude
-#     """
-#     neighborhood = neighborhood.lower()
-#     if neighborhood.find(" ") > -1:
-#         first = neighborhood[:neighborhood.find(" ")]
-#         end = neighborhood[neighborhood.find(" ") + 1:]
-#         neighborhood = f"{first}-{end}"
-#     try:
-#         headers = {
-#             'User-Agent': (
-#                 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-#                 'AppleWebKit/537.36 (KHTML, like Gecko) '
-#                 'Chrome/91.0.4472.124 Safari/537.36'
-#             )
-#         }
-
-#         url = f"{CIVIC_HUB_BASE}/{neighborhood}"
-#         print(f"Fetching: {url}")
-
-#         # Step 1 – get static HTML
-#         response = requests.get(url, headers=headers, timeout=30)
-#         response.raise_for_status()
-#         soup = BeautifulSoup(response.text, "html.parser")
-
-#         table = soup.find("table")
-
-#         # Step 2 – if table missing or suspiciously constant (289 rows), check for data endpoints
-#         if not table:
-#             print("⚠️  No table tag found — trying to locate data source in page scripts...")
-#         else:
-#             rows = table.find_all("tr")
-#             if len(rows) == 289:  # CivicHub placeholder table symptom
-#                 print("⚠️  Detected placeholder table (289 rows) — attempting API lookup...")
-#             else:
-#                 # ✅ Static table looks legitimate
-#                 table_data = []
-#                 for row in rows:
-#                     cells = row.find_all(["th", "td"])
-#                     row_data = [cell.get_text(strip=True) for cell in cells]
-#                     table_data.append(row_data)
-#                 crime_amount = len(rows) - 1 if rows and rows[0].find("th") else len(rows)
-#                 table_data.append({"crime_amount": crime_amount})
-#                 return table_data
-
-#         # Step 3 – try to extract JSON or CSV endpoint URLs embedded in the page
-#         scripts = soup.find_all("script")
-#         api_url = None
-#         for script in scripts:
-#             if script.string and "crime-data" in script.string:
-#                 match = re.search(r"https://[^\s'\"]+crime-data[^\s'\"]+", script.string)
-#                 if match:
-#                     api_url = match.group(0)
-#                     break
-
-#         if api_url:
-#             print(f"Found possible data API: {api_url}")
-#             try:
-#                 data_resp = requests.get(api_url, headers=headers, timeout=30)
-#                 data_resp.raise_for_status()
-#                 # Try JSON first
-#                 if data_resp.headers.get("Content-Type", "").startswith("application/json"):
-#                     data = data_resp.json()
-#                     table_data = data.get("data") or data
-#                     crime_amount = len(table_data)
-#                     table_data.append({"crime_amount": crime_amount})
-#                     print("8" * 50)
-#                     print(table_data)
-#                     return table_data
-#                 # Try CSV fallback
-#                 elif "text/csv" in data_resp.headers.get("Content-Type", ""):
-#                     lines = data_resp.text.splitlines()
-#                     table_data = [line.split(",") for line in lines]
-#                     crime_amount = len(table_data) - 1
-#                     table_data.append({"crime_amount": crime_amount})
-#                     print("9" * 50)
-#                     print(table_data)
-#                     return table_data
-#             except Exception as e:
-#                 print(f"Failed to fetch data from detected API: {e}")
-                    
-#     except Exception as e:
-#         print(f"Error scraping civic hub: {str(e)}")
-#         return []
-
+    
 @router.post("/scrape-civic-hub/")
 async def scrape_civic_hub(neighborhood: str):
     """
@@ -406,65 +322,22 @@ Provide ONLY a valid JSON output — nothing else.
 Do NOT include reasoning, explanations, or commentary in your response. All analysis should be internal.
 
 You are provided with a user profile of {user} and the neighborhood data of {nhood}.
-Using ONLY the data provided in the table — do NOT extrapolate, estimate, or add missing data — compare these datasets to determine the safest earliest and latest times to go out.
+Using ONLY the data provided in the table — do NOT extrapolate, estimate, or add missing data — give 7 sentences of advice to the user about how they should wear, what they should look out for, and any other RELEVANT details pertaining to both their environment in order for them to remain safe.
 
 Rules:
 - Respond ONLY in JSON format using the schema below.
 - Do NOT include markdown, comments, or text outside JSON.
 - If no user input or no data is available, return: {{ "recommendations": {{}} }}
 - Always include your results under the top-level key `"recommendations"` (never rename it).
-- Use safety levels: "low", "medium", or "high".
 - Do not fabricate times, counts, or incidents — only use what is present in the table.
 - Include and incorporate the crime_amount in the final JSON, from the {nhood} dataset. If none exists, simply write 0.
+- Also include in the recommendations the crime_amount from the {nhood} dataset.
 
 Follow this exact JSON schema for all responses:
 
 {{
   "recommendations": {{
-    "safest_earliest_time": "3:00 p.m.",
-    "safest_latest_time": "6:00 p.m.",
-    "overall_safety_level": "medium",
-    "time_period_analysis": {{
-      "3:00_pm_to_6:00_pm": {{
-        "safety_level": "medium",
-        "incident_count": 28,
-        "notable_incidents": [
-          "Larceny Theft",
-          "Drug Offense",
-          "Assault with Gun",
-          "Burglary",
-          "Robbery"
-        ],
-        "jewelry_risk": "medium",
-        "reasoning": "Moderate criminal activity including thefts and one aggravated assault with gun at 4:03 PM in South of Market. Silver bracelet and gold necklace may attract attention in certain districts."
-      }},
-      "6:00_pm_to_9:00_pm": {{
-        "safety_level": "medium",
-        "incident_count": 25,
-        "notable_incidents": [
-          "Motor Vehicle Theft",
-          "Larceny Theft",
-          "Assault",
-          "Battery",
-          "Burglary"
-        ],
-        "jewelry_risk": "medium",
-        "reasoning": "Criminal activity continues with thefts, assaults, and battery incidents. Medium expensive clothing and visible jewelry present moderate risk."
-      }}
-    }},
-    "high_risk_areas": [
-      "Tenderloin",
-      "Mission",
-      "South of Market",
-      "Bayview Hunters Point"
-    ],
-    "lower_risk_areas": [
-      "Marina",
-      "Inner Sunset",
-      "Outer Richmond"
-    ],
-    "jewelry_considerations": "Silver bracelet and gold necklace may attract unwanted attention, particularly in high-crime districts like Tenderloin and Mission where multiple theft incidents occur during preferred hours",
-    "clothing_considerations": "Medium expensive, not too flashy clothing reduces risk compared to obviously expensive attire, but theft incidents remain present throughout time preference window",
+    ["rec1"], ["rec2"] ... ,
     "crime_amount": 30
   }}
 }}
@@ -476,6 +349,8 @@ Follow this exact JSON schema for all responses:
         )
 
         data = message.content
+
+        print(data)
 
         return data
     except Exception as e:
@@ -602,7 +477,7 @@ def pub_sent(ps: PublicSentiment):
 # METRIC SCORE
 
 @router.post("/safety-metric/")
-async def safety_metric(crime: Crime):
+async def safety_metric(crime: Crime, time: UserTime):
     # Start lower for expanded spread
     score = 18  
 
@@ -612,26 +487,26 @@ async def safety_metric(crime: Crime):
 
     # === Time-based danger adjustment ===
     curr_time = datetime.now().time()
-    low_time = recs["safest_earliest_time"]
-    high_time = recs["safest_latest_time"]
+    low_time = time.safest_earliest_time
+    high_time = time.safest_latest_time
 
-    def parse_time(t):
-        t = t.strip().lower()
-        base = int(t.split(":")[0])
-        if "p.m" in t and base != 12:
-            base += 12
-        elif "a.m" in t and base == 12:
-            base = 0
-        return base
+    # def parse_time(t):
+    #     t = t.strip().lower()
+    #     base = int(t.split(":")[0])
+    #     if "p.m" in t and base != 12:
+    #         base += 12
+    #     elif "a.m" in t and base == 12:
+    #         base = 0
+    #     return base
 
-    low_final_time = parse_time(low_time)
-    high_final_time = parse_time(high_time)
+    # low_final_time = parse_time(low_time)
+    # high_final_time = parse_time(high_time)
     curr_hour = curr_time.hour
 
     # Outside safe window → more danger
-    if not (low_final_time <= curr_hour <= high_final_time):
+    if not (low_time <= curr_hour <= high_time):
         score += 5
-    elif high_final_time - 2 <= curr_hour <= high_final_time:
+    elif low_time - 2 <= curr_hour <= high_time:
         score += 3
 
     # === Day of week ===
