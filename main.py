@@ -12,7 +12,7 @@ import logging
 from dotenv import load_dotenv
 
 # Use absolute imports for routers so this file can be executed as a top-level module
-from .routers import scraper, location
+from routers import scraper, location
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
