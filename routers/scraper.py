@@ -1,7 +1,7 @@
 from fastapi import FastAPI, APIRouter
 from pydantic import BaseModel
 from dotenv import load_dotenv
-import os, requests, json, re
+import os, requests, json, re, csv
 from typing import List, Dict
 from datetime import datetime
 from bs4 import BeautifulSoup
@@ -222,10 +222,6 @@ async def crime_recs(nhood: Crime):
     
 @router.post("/scrape-civic-hub/")
 async def scrape_civic_hub(neighborhood: str):
-    """
-    Scrapes the civic hub website
-    Returns JSON list of values to be parsed by Claude
-    """
     neighborhood = neighborhood.lower()
     if " " in neighborhood:
         first, end = neighborhood.split(" ", 1)
@@ -249,18 +245,38 @@ async def scrape_civic_hub(neighborhood: str):
 
         table = soup.find("table")
 
+        # Define expected headers
+        expected_headers = [
+            "Date", "Time", "Incident #", "Location",
+            "District", "CategorySFPD", "Description", "Resolution"
+        ]
+
         if table:
             rows = table.find_all("tr")
             if len(rows) != 289:
                 table_data = []
-                for row in rows:
-                    cells = row.find_all(["th", "td"])
-                    row_data = [cell.get_text(strip=True) for cell in cells]
-                    table_data.append(row_data)
-                crime_amount = len(rows) - 1 if rows and rows[0].find("th") else len(rows)
-                table_data.append({"crime_amount": crime_amount})
+
+                # Extract header row if it exists
+                headers_row = [th.get_text(strip=True) for th in rows[0].find_all("th")] if rows and rows[0].find_all("th") else expected_headers
+
+                # Normalize header names to match expected ones
+                headers_row = [h if h in expected_headers else expected_headers[i] for i, h in enumerate(headers_row)]
+
+                # Process data rows
+                for row in rows[1:]:
+                    cells = row.find_all("td")
+                    values = [cell.get_text(strip=True) for cell in cells]
+
+                    # Zip headers and values into a dictionary
+                    if len(values) == len(headers_row):
+                        entry = dict(zip(headers_row, values))
+                        table_data.append(entry)
+
+                # Add total count
+                table_data.append({"crime_amount": len(table_data)})
                 return JSONResponse(content=table_data)
 
+        # If no <table>, try finding JSON/CSV in script tags
         scripts = soup.find_all("script")
         api_url = None
         for script in scripts:
@@ -278,17 +294,23 @@ async def scrape_civic_hub(neighborhood: str):
 
                 if data_resp.headers.get("Content-Type", "").startswith("application/json"):
                     data = data_resp.json()
-                    table_data = data.get("data") or data
-                    crime_amount = len(table_data)
-                    table_data.append({"crime_amount": crime_amount})
-                    return JSONResponse(content=table_data)
+                    raw_data = data.get("data") or data
+
+                    # Transform each row into dictionary format
+                    formatted = []
+                    for item in raw_data:
+                        entry = dict(zip(expected_headers, item[:len(expected_headers)]))
+                        formatted.append(entry)
+
+                    formatted.append({"crime_amount": len(formatted)})
+                    return JSONResponse(content=formatted)
 
                 elif "text/csv" in data_resp.headers.get("Content-Type", ""):
                     lines = data_resp.text.splitlines()
-                    table_data = [line.split(",") for line in lines]
-                    crime_amount = len(table_data) - 1
-                    table_data.append({"crime_amount": crime_amount})
-                    return JSONResponse(content=table_data)
+                    reader = csv.DictReader(lines, fieldnames=expected_headers)
+                    formatted = [row for row in reader]
+                    formatted.append({"crime_amount": len(formatted) - 1})
+                    return JSONResponse(content=formatted)
 
             except Exception as e:
                 print(f"Failed to fetch data from detected API: {e}")
